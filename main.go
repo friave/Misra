@@ -87,6 +87,7 @@ func (socket *MisraSocket) connect(address string) {
 
 func (socket *MisraSocket) handleMessage() {
 	go socket.listenFromConn()
+	done := make(chan bool)
 	for {
 		switch socket.myToken {
 		case NONE:
@@ -95,15 +96,16 @@ func (socket *MisraSocket) handleMessage() {
 				socket.receiveToken(token)
 			}
 		case PING:
+			timer := time.NewTimer(10 * time.Second)
 			fmt.Printf("I have a ping token %d, entering critical section.\n", socket.myToken)
-			time.Sleep(1 * time.Second)
-			fmt.Println("Exiting critical section.")
+			defer timer.Stop()
 			select {
 			case token := <-socket.readChannel:
 				socket.receiveToken(token)
 				continue
-			default:
-				socket.send(PING_TOKEN)
+			case <-timer.C:
+				fmt.Println("Exiting critical section.")
+				done <- true
 			}
 		case PONG:
 			socket.send(PONG_TOKEN)
