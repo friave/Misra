@@ -95,7 +95,7 @@ func (socket *MisraSocket) handleMessage() {
 				socket.receiveToken(token)
 			}
 		case PING:
-			fmt.Println("I have a token, entering critical section.")
+			fmt.Printf("I have a ping token %d, entering critical section.\n", socket.myToken)
 			time.Sleep(1 * time.Second)
 			fmt.Println("Exiting critical section.")
 			select {
@@ -156,7 +156,7 @@ func (socket *MisraSocket) send(tokenType TokenType) {
 	} else {
 		tokenToSend = "PONG"
 	}
-	fmt.Printf("Token send: %s, value: %d", tokenToSend, socket.m)
+	fmt.Printf("Token send: %s, value: %d\n", tokenToSend, socket.m)
 }
 
 func (socket *MisraSocket) receiveToken(token int64) {
