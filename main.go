@@ -59,7 +59,6 @@ func (socket *MisraSocket) listen(wg *sync.WaitGroup, port string) {
 		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
-	// defer listener.Close()
 
 	conn, err := listener.Accept()
 	if err != nil {
@@ -87,35 +86,75 @@ func (socket *MisraSocket) connect(address string) {
 
 func (socket *MisraSocket) handleMessage() {
 	go socket.listenFromConn()
-	done := make(chan bool)
 	for {
-		switch socket.myToken {
-		case NONE:
-			select {
-			case token := <-socket.readChannel:
-				socket.receiveToken(token)
-			}
-		case PING:
-			timer := time.NewTimer(10 * time.Second)
-			fmt.Printf("I have a ping token %d, entering critical section.\n", socket.myToken)
-			defer timer.Stop()
-			select {
-			case token := <-socket.readChannel:
-				socket.receiveToken(token)
+		select {
+		case token := <-socket.readChannel:
+			fmt.Printf("I received token: %d.\n", token)
+
+			if absolute(token) < absolute(socket.m) {
+				fmt.Println("This is old token, ignoring.")
 				continue
-			case <-timer.C:
-				fmt.Println("Exiting critical section.")
-				done <- true
 			}
-		case PONG:
-			socket.send(PONG_TOKEN)
-		case BOTH:
-			fmt.Println("I have both tokens, incarnating them.")
-			socket.ping++
-			socket.pong = -socket.ping
-			fmt.Printf("New token values: PING: %d PONG: %d\n", socket.ping, socket.pong)
-			socket.send(PING_TOKEN)
-			socket.send(PONG_TOKEN)
+
+			if token == socket.m {
+				if socket.m > 0 && !(socket.myToken == PONG || socket.myToken == BOTH) {
+					fmt.Println("PONG is lost, regenerating.")
+					socket.ping = token
+					socket.pong = -token
+					socket.send(PONG_TOKEN)
+				}
+				if socket.m < 0 && !(socket.myToken == PING || socket.myToken == BOTH) {
+					fmt.Println("PING is lost, regenerating.")
+					socket.pong = token
+					socket.ping = absolute(token)
+					socket.send(PING_TOKEN)
+				}
+			}
+
+			if token > 0 { // PING
+				socket.ping = token
+				socket.pong = -token
+
+				if socket.myToken == NONE {
+					socket.myToken = PING
+				}
+				if socket.myToken == PONG {
+					socket.myToken = BOTH
+				}
+
+				fmt.Printf("I have a ping token %d, entering critical section.\n", socket.ping)
+				go func() {
+					time.Sleep(10 * time.Second)
+					fmt.Println("Exiting critical section.")
+					socket.send(PING_TOKEN)
+				}()
+			}
+
+			if token < 0 { //PONG
+				socket.pong = token
+				socket.ping = absolute(token)
+
+				if socket.myToken == NONE {
+					socket.myToken = PONG
+				}
+				if socket.myToken == PING {
+					socket.myToken = BOTH
+				}
+			}
+
+			if socket.myToken == BOTH {
+				fmt.Println("I have both tokens, incarnating them.")
+				socket.ping++
+				socket.pong = -socket.ping
+				fmt.Printf("New token values: PING: %d PONG: %d\n", socket.ping, socket.pong)
+
+			}
+
+			if token < 0 {
+				time.Sleep(2 * time.Second)
+				socket.send(PONG_TOKEN)
+			}
+
 		}
 	}
 
@@ -159,51 +198,6 @@ func (socket *MisraSocket) send(tokenType TokenType) {
 		tokenToSend = "PONG"
 	}
 	fmt.Printf("Token send: %s, value: %d\n", tokenToSend, socket.m)
-}
-
-func (socket *MisraSocket) receiveToken(token int64) {
-	if absolute(token) < absolute(socket.m) {
-		fmt.Println("I recived old token.")
-		return
-	}
-
-	if token == socket.m {
-		if socket.m > 0 {
-			fmt.Println("PONG is lost, regenerating.")
-		}
-		if socket.m < 0 {
-			fmt.Println("PING is lost, regenerating.")
-		}
-		socket.myToken = BOTH
-		return
-	}
-
-	if token > 0 { // PING
-		socket.ping = token
-		socket.pong = -token
-
-		if socket.myToken == NONE {
-			socket.myToken = PING
-		}
-		if socket.myToken == PONG {
-			socket.myToken = BOTH
-		}
-		return
-	}
-
-	if token < 0 { //PONG
-		socket.pong = token
-		socket.ping = -token
-
-		if socket.myToken == NONE {
-			socket.myToken = PONG
-		}
-		if socket.myToken == PING {
-			socket.myToken = BOTH
-		}
-		return
-
-	}
 }
 
 func absolute(x int64) int64 {
