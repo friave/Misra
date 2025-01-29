@@ -122,10 +122,10 @@ func (socket *MisraSocket) handleMessage() {
 					socket.myToken = BOTH
 				}
 
-				fmt.Printf("I have a ping token %d, entering critical section.\n", socket.ping)
+				fmt.Printf("            I have a ping token %d, entering critical section.\n", socket.ping)
 				go func() {
 					time.Sleep(10 * time.Second)
-					fmt.Println("Exiting critical section.")
+					fmt.Println("            Exiting critical section.")
 					socket.send(PING_TOKEN)
 				}()
 			}
